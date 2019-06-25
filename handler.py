@@ -1,24 +1,37 @@
 import json
+from botocore.vendored import requests
+import urllib
+from bs4 import BeautifulSoup
+import traceback
 
 
-def hello(event, context):
-    body = {
-        "message": "Go Serverless v1.0! Your function executed successfully!",
-        "input": event
-    }
+def title(event, context):
+    tb = ''
+    try:
 
-    response = {
-        "statusCode": 200,
-        "body": json.dumps(body)
-    }
+        url = event['queryStringParameters']['url']
+        url = urllib.parse.unquote(url)
 
-    return response
+        rsp = requests.get(url)
+        soup = BeautifulSoup(rsp.content, 'html.parser')
+        title = soup.title.string
 
-    # Use this code if you don't use the http event with the LAMBDA-PROXY
-    # integration
-    """
+        return {
+            'statusCode': 200,
+            'body': json.dumps({"title": title}),
+            'headers': {
+                'Content-Type': 'application/json',
+            }
+        }
+
+    #TODO; more info in error handling
+    except Exception as ex:
+        tb = traceback.format_exc()
+
     return {
-        "message": "Go Serverless v1.0! Your function executed successfully!",
-        "event": event
+        'statusCode': 200,
+        'body': {"error": tb},
+        'headers': {
+            'Content-Type': 'application/json',
+        }
     }
-    """
