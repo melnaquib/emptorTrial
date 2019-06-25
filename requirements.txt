@@ -1,2 +1,4 @@
+boto3
+boto
 BeautifulSoup4
 lxml
