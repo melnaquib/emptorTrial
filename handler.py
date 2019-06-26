@@ -13,15 +13,24 @@ logger.setLevel(logging.INFO)
 
 cfg = {
     's3': {
-        'bucket': "emptortrial-content",
+        'bucket': "emptortrial-docs",
     },
     'dyndb': {
-        'table': 'emptorTrial_titles'
+        'table': 'emptortrial-titles'
     }
 }
 
 
 def title_process(bucket, table, key, url):
+    '''
+    process item from Table "table"; of ID "key"; retrieves html docuemnt from "url"
+    stores it in s3 Bucket, and parses title, stores that into dynamodb "table" and updates item status to "PROCESSED"
+    :param bucket: s3 bucket to store retrieved html document
+    :param table: dynamodb table to store results
+    :param key: item id in table
+    :param url: html document url
+    :return: item update result
+    '''
     logger.info("BGN " + key)
     rsp = requests.get(url)
     soup = BeautifulSoup(rsp.content, 'html.parser')
@@ -31,11 +40,17 @@ def title_process(bucket, table, key, url):
     bucket.put_object(bucket.name, Key=key, Body=rsp.content)
     s3url = 'https://{bucket}.s3.amazonaws.com/{key}'.format(bucket=cfg['s3']['bucket'], key=key)
 
-    return table.update_item(Key={'id': key}, AttributeUpdates={'s3url': {'Value': s3url}, 'title': {'Value': doctitle},
-                                                                'status': {'Value': 'PROCESSED'}})
+    return table.update_item(Key={'id': key}, AttributeUpdates={ 's3url': {'Value': str(s3url)}, 'title': {'Value': str(doctitle)},
+                                                                'status': {'Value': 'PROCESSED'} } )
 
 
 def title(event, context):
+    '''
+    function loops through records in "event", and process new entries which status is "PENDING"
+    :param event: dynamodb stream event
+    :param context:
+    :return: None
+    '''
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(cfg['dyndb']['table'])
 
@@ -45,12 +60,13 @@ def title(event, context):
     # TODO, async
     for record in event['Records']:
         try:
-            if 'INSERT' != record['eventName'] or 'PENDING' != record['dynamodb']['NewImage']['status']:
+            if 'INSERT' != record['eventName'] or 'PENDING' != record['dynamodb']['NewImage']['status']['S']:
                 logger.info("SKIPPED " + json.dumps(record))
                 continue
 
             item = record['dynamodb']['NewImage']
-            res = title_process(bucket, table, list(item['Id'].values())[0], item['url'])
+            res = title_process(bucket, table, item['id']['S'], item['url']['S'])
+
             logger.info(res)
 
         except Exception as ex:
@@ -58,6 +74,11 @@ def title(event, context):
 
 
 def title_submit(event, context):
+    '''
+    :param event: api proxy event, contains query parameter 'url'
+    :param context:
+    :return: id for processing item in dynamodb titles table
+    '''
     tb = ''
     try:
 
@@ -93,6 +114,11 @@ def title_submit(event, context):
 
 
 def title_get(event, context):
+    '''
+    :param event: api proxy event, contains query parameter 'id'
+    :param context:
+    :return: processing item in dynamodb titles table, of the specified id
+    '''
     tb = ''
     try:
 
